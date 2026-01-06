@@ -1,28 +1,111 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Theme colors and styling constants for the app.
  */
 
-import { Platform } from 'react-native';
+import { Platform } from "react-native";
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const tintColorLight = "#0a7ea4";
+const tintColorDark = "#fff";
+
+// Primary colors (sky blue)
+export const primary = {
+  50: "#f0f9ff",
+  100: "#e0f2fe",
+  200: "#bae6fd",
+  300: "#7dd3fc",
+  400: "#38bdf8",
+  500: "#0ea5e9",
+  600: "#0284c7",
+  700: "#0369a1",
+  800: "#075985",
+  900: "#0c4a6e",
+  950: "#082f49",
+};
+
+// Dark/neutral colors (slate)
+export const dark = {
+  50: "#f8fafc",
+  100: "#f1f5f9",
+  200: "#e2e8f0",
+  300: "#cbd5e1",
+  400: "#94a3b8",
+  500: "#64748b",
+  600: "#475569",
+  700: "#334155",
+  800: "#1e293b",
+  900: "#0f172a",
+  950: "#020617",
+};
+
+// Semantic colors
+export const semantic = {
+  success: "#22c55e",
+  warning: "#f59e0b",
+  error: "#ef4444",
+  info: "#3b82f6",
+};
+
+// Additional utility colors
+export const colors = {
+  white: "#ffffff",
+  black: "#000000",
+  transparent: "transparent",
+  // Green shades
+  green: {
+    50: "#f0fdf4",
+    100: "#dcfce7",
+    200: "#bbf7d0",
+    300: "#86efac",
+    400: "#4ade80",
+    500: "#22c55e",
+    600: "#16a34a",
+    700: "#15803d",
+    800: "#166534",
+    900: "#14532d",
+  },
+  // Red shades
+  red: {
+    50: "#fef2f2",
+    100: "#fee2e2",
+    200: "#fecaca",
+    300: "#fca5a5",
+    400: "#f87171",
+    500: "#ef4444",
+    600: "#dc2626",
+    700: "#b91c1c",
+    800: "#991b1b",
+    900: "#7f1d1d",
+  },
+  // Amber shades
+  amber: {
+    50: "#fffbeb",
+    100: "#fef3c7",
+    200: "#fde68a",
+    300: "#fcd34d",
+    400: "#fbbf24",
+    500: "#f59e0b",
+    600: "#d97706",
+    700: "#b45309",
+    800: "#92400e",
+    900: "#78350f",
+  },
+};
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
+    text: "#11181C",
+    background: "#fff",
     tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
+    icon: "#687076",
+    tabIconDefault: "#687076",
     tabIconSelected: tintColorLight,
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
+    text: "#ECEDEE",
+    background: "#151718",
     tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
+    icon: "#9BA1A6",
+    tabIconDefault: "#9BA1A6",
     tabIconSelected: tintColorDark,
   },
 };
@@ -30,24 +113,25 @@ export const Colors = {
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
+    sans: "system-ui",
     /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
+    serif: "ui-serif",
     /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
+    rounded: "ui-rounded",
     /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
+    mono: "ui-monospace",
   },
   default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
+    sans: "normal",
+    serif: "serif",
+    rounded: "normal",
+    mono: "monospace",
   },
   web: {
     sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
     serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
+    rounded:
+      "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
   },
 });

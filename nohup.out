@@ -1,0 +1,14 @@
+opencode server listening on http://127.0.0.1:4160
+Error: AudioQueueStart failed (-66681)
+Failed to play audible bell: ShellError: Failed with exit code 1
+ exitCode: 1,
+   stdout: "",
+   stderr: "Error: AudioQueueStart failed (-66681)\n",
+
+      at ShellPromise (unknown:75:16)
+      at BunShell (unknown:191:35)
+      at /Users/koushik/.config/opencode/plugin/terminal-bell.ts:15:17
+      at event (/Users/koushik/.config/opencode/plugin/terminal-bell.ts:15:17)
+      at src/plugin/index.ts:99:14
+      at processTicksAndRejections (unknown:7:39)
+

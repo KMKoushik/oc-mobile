@@ -6,7 +6,6 @@ import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
 type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
-type IconSymbolName = keyof typeof MAPPING;
 
 /**
  * Add your SF Symbols to Material Icons mappings here.
@@ -14,11 +13,67 @@ type IconSymbolName = keyof typeof MAPPING;
  * - see SF Symbols in the [SF Symbols](https://developer.apple.com/sf-symbols/) app.
  */
 const MAPPING = {
+  // Navigation
   'house.fill': 'home',
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'chevron.left': 'chevron-left',
+  'chevron.up': 'keyboard-arrow-up',
+  'chevron.down': 'keyboard-arrow-down',
+
+  // Tabs
+  'bubble.left.and.bubble.right.fill': 'chat',
+  'bubble.left.and.bubble.right': 'chat-bubble-outline',
+  'server.rack': 'dns',
+  'gearshape.fill': 'settings',
+  'gearshape': 'settings',
+
+  // Search
+  'magnifyingglass': 'search',
+
+  // Actions
+  'plus': 'add',
+  'plus.circle.fill': 'add-circle',
+  'trash': 'delete',
+  'trash.fill': 'delete',
+  'square.and.arrow.up': 'share',
+  'xmark': 'close',
+  'xmark.circle.fill': 'cancel',
+  'checkmark': 'check',
+  'checkmark.circle.fill': 'check-circle',
+  'pencil': 'edit',
+  'doc.on.doc': 'content-copy',
+
+  // Status
+  'circle.fill': 'circle',
+  'exclamationmark.triangle.fill': 'warning',
+  'exclamationmark.circle.fill': 'error',
+  'info.circle.fill': 'info',
+  'arrow.clockwise': 'refresh',
+
+  // Objects
+  'folder': 'folder',
+  'folder.fill': 'folder',
+  'doc': 'description',
+  'doc.fill': 'description',
+  'terminal': 'terminal',
+  'wrench.fill': 'build',
+  'brain': 'psychology',
+  'lightbulb.fill': 'lightbulb',
+  'link': 'link',
+  'cpu': 'memory',
+
+  // Communication
+  'person.fill': 'person',
+  'person.circle.fill': 'account-circle',
+  'bubble.left.fill': 'chat-bubble',
+  'bubble.right.fill': 'chat-bubble',
+  'ellipsis': 'more-horiz',
+  'ellipsis.circle': 'more-horiz',
 } as IconMapping;
+
+export type IconSymbolName = keyof typeof MAPPING;
 
 /**
  * An icon component that uses native SF Symbols on iOS, and Material Icons on Android and web.
@@ -37,5 +92,10 @@ export function IconSymbol({
   style?: StyleProp<TextStyle>;
   weight?: SymbolWeight;
 }) {
-  return <MaterialIcons color={color} size={size} name={MAPPING[name]} style={style} />;
+  const iconName = MAPPING[name];
+  if (!iconName) {
+    console.warn(`IconSymbol: No mapping found for "${name}"`);
+    return null;
+  }
+  return <MaterialIcons color={color} size={size} name={iconName} style={style} />;
 }
