@@ -8,6 +8,7 @@ import type {
   SessionStatus,
   Todo,
   AssistantMessage,
+  FileDiff,
 } from "@/lib/opencode/types";
 
 interface TokenCounts {
@@ -145,6 +146,33 @@ export function useSession(id: string | undefined) {
       });
 
       return response.data ?? null;
+    },
+    enabled: isConnected && !!activeProjectPath && !!id,
+    staleTime: 30 * 1000,
+  });
+}
+
+/**
+ * Hook to fetch session diffs (file changes)
+ */
+export function useSessionDiffs(id: string | undefined) {
+  const { serverUrl, activeProjectPath, isConnected, getActiveClient } =
+    useActiveConnection();
+
+  return useQuery({
+    queryKey: queryKeys.sessions.diffs(serverUrl, activeProjectPath, id ?? ""),
+    queryFn: async (): Promise<FileDiff[]> => {
+      const client = getActiveClient();
+      if (!client || !activeProjectPath || !id) {
+        return [];
+      }
+
+      const response = await client.session.diff({
+        path: { id },
+        query: { directory: activeProjectPath },
+      });
+
+      return response.data || [];
     },
     enabled: isConnected && !!activeProjectPath && !!id,
     staleTime: 30 * 1000,

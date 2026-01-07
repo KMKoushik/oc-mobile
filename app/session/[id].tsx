@@ -12,7 +12,7 @@ import {
   Modal,
 } from "react-native";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
-import { useLocalSearchParams, useNavigation } from "expo-router";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { useSessionsStore } from "@/lib/stores/sessions";
@@ -21,6 +21,7 @@ import { useAgentsStore } from "@/lib/stores/agents";
 import {
   useSession,
   useSessionMessages,
+  useSessionDiffs,
   useShareSession,
   useUnshareSession,
   useAbortSession,
@@ -49,6 +50,7 @@ function formatTokenCount(count: number): string {
 export default function SessionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const navigation = useNavigation();
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const flatListRef = useRef<
@@ -67,6 +69,7 @@ export default function SessionDetailScreen() {
   const { data: session } = useSession(id);
   const { data: messagesData, isLoading: isLoadingMessages } =
     useSessionMessages(id);
+  const { data: diffs } = useSessionDiffs(id);
   const { data: modelsData, isLoading: isLoadingModels } = useModels();
   const { data: agents = [] } = useAgents();
 
@@ -651,41 +654,75 @@ export default function SessionDetailScreen() {
 
       {/* Input bar */}
       <View style={[styles.inputWrapper, isDark && styles.inputWrapperDark]}>
-        {/* Tasks and Token count row - above input */}
-        {(todos.length > 0 || tokenCounts.total > 0) && (
+        {/* Tasks, Files and Token count row - above input */}
+        {(todos.length > 0 ||
+          (diffs && diffs.length > 0) ||
+          tokenCounts.total > 0) && (
           <View style={styles.aboveInputRow}>
-            {/* Tasks button - left side */}
-            {todos.length > 0 ? (
-              <Pressable
-                onPress={() => setShowTasksModal(true)}
-                style={({ pressed }) => [
-                  styles.tasksButton,
-                  isDark && styles.tasksButtonDark,
-                  pressed && { opacity: 0.7 },
-                ]}
-                hitSlop={4}
-              >
-                <View style={styles.tasksButtonRow}>
-                  <View style={styles.tasksButtonIcon}>
-                    <IconSymbol
-                      name="checkmark.circle.fill"
-                      size={14}
-                      color={isDark ? primary[400] : primary[600]}
-                    />
+            {/* Tasks and Files buttons - left side */}
+            <View style={styles.aboveInputButtons}>
+              {/* Tasks button */}
+              {todos.length > 0 && (
+                <Pressable
+                  onPress={() => setShowTasksModal(true)}
+                  style={({ pressed }) => [
+                    styles.tasksButton,
+                    isDark && styles.tasksButtonDark,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  hitSlop={4}
+                >
+                  <View style={styles.tasksButtonRow}>
+                    <View style={styles.tasksButtonIcon}>
+                      <IconSymbol
+                        name="checkmark.circle.fill"
+                        size={14}
+                        color={isDark ? primary[400] : primary[600]}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.tasksButtonText,
+                        isDark && styles.tasksButtonTextDark,
+                      ]}
+                    >
+                      {`Tasks (${todos.filter((t) => t.status === "completed").length}/${todos.length})`}
+                    </Text>
                   </View>
-                  <Text
-                    style={[
-                      styles.tasksButtonText,
-                      isDark && styles.tasksButtonTextDark,
-                    ]}
-                  >
-                    {`Tasks (${todos.filter((t) => t.status === "completed").length}/${todos.length})`}
-                  </Text>
-                </View>
-              </Pressable>
-            ) : (
-              <View />
-            )}
+                </Pressable>
+              )}
+
+              {/* Files button */}
+              {diffs && diffs.length > 0 && (
+                <Pressable
+                  onPress={() => router.push(`/session/files/${id}`)}
+                  style={({ pressed }) => [
+                    styles.filesButton,
+                    isDark && styles.filesButtonDark,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  hitSlop={4}
+                >
+                  <View style={styles.tasksButtonRow}>
+                    <View style={styles.tasksButtonIcon}>
+                      <IconSymbol
+                        name="doc.text"
+                        size={14}
+                        color={isDark ? colors.green[400] : colors.green[600]}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.filesButtonText,
+                        isDark && styles.filesButtonTextDark,
+                      ]}
+                    >
+                      {`Files (${diffs.length})`}
+                    </Text>
+                  </View>
+                </Pressable>
+              )}
+            </View>
 
             {/* Token count - right side */}
             {tokenCounts.total > 0 && (
@@ -929,12 +966,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
   },
-  // Row container for tasks and token count above input
+  // Row container for tasks, files and token count above input
   aboveInputRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 12,
+  },
+  // Container for tasks and files buttons
+  aboveInputButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   // Tasks button
   tasksButton: {
@@ -961,6 +1004,24 @@ const styles = StyleSheet.create({
   },
   tasksButtonTextDark: {
     color: primary[400],
+  },
+  // Files button
+  filesButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: "rgba(34, 197, 94, 0.1)",
+  },
+  filesButtonDark: {
+    backgroundColor: "rgba(34, 197, 94, 0.2)",
+  },
+  filesButtonText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.green[600],
+  },
+  filesButtonTextDark: {
+    color: colors.green[400],
   },
   // Token count badge - right side
   tokenCountBadge: {

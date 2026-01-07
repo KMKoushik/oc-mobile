@@ -9,6 +9,7 @@ export {
   useSessions,
   useSession,
   useSessionMessages,
+  useSessionDiffs,
   useSessionStatuses,
   useCreateSession,
   useDeleteSession,

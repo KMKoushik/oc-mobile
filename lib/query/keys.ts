@@ -28,6 +28,8 @@ export const queryKeys = {
       [...queryKeys.sessions.all, "todos", serverUrl, projectPath, id] as const,
     status: (serverUrl: string, projectPath: string) =>
       [...queryKeys.sessions.all, "status", serverUrl, projectPath] as const,
+    diffs: (serverUrl: string, projectPath: string, id: string) =>
+      [...queryKeys.sessions.all, "diffs", serverUrl, projectPath, id] as const,
   },
 
   // Models/Providers
