@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -6,10 +6,17 @@ import {
   RefreshControl,
   ActivityIndicator,
   StyleSheet,
+  type ViewToken,
 } from "react-native";
+import type { Session } from "@/lib/opencode/types";
 import { useRouter } from "expo-router";
 import { useServersStore } from "@/lib/stores/servers";
-import { useSessionsStore } from "@/lib/stores/sessions";
+import {
+  useSessions,
+  useCreateSession,
+  useDeleteSession,
+  usePrefetchSession,
+} from "@/lib/query";
 import { SessionListItem } from "@/components/sessions/session-list-item";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -24,36 +31,65 @@ export default function SessionsScreen() {
   const serverStates = useServersStore((s) => s.serverStates);
   const activeProjectPath = useServersStore((s) => s.activeProjectPath);
 
-  const sessions = useSessionsStore((s) => s.sessions);
-  const sessionStatuses = useSessionsStore((s) => s.sessionStatuses);
-  const sessionTokenCounts = useSessionsStore((s) => s.sessionTokenCounts);
-  const isLoading = useSessionsStore((s) => s.isLoading);
-  const fetchSessions = useSessionsStore((s) => s.fetchSessions);
-  const createSession = useSessionsStore((s) => s.createSession);
-  const deleteSession = useSessionsStore((s) => s.deleteSession);
+  // TanStack Query hooks
+  const {
+    data: sessionsData,
+    isLoading,
+    refetch,
+    isRefetching,
+  } = useSessions();
+
+  const createSessionMutation = useCreateSession();
+  const deleteSessionMutation = useDeleteSession();
+  const prefetchSession = usePrefetchSession();
+
+  // Filter out child sessions (explore task sessions) - only show root sessions
+  const sessions = (sessionsData?.sessions ?? []).filter((s) => !s.parentID);
+  const sessionStatuses = sessionsData?.statuses ?? {};
 
   const activeServer = activeServerId ? serverStates[activeServerId] : null;
   const isConnected = activeServer?.status === "connected";
 
-  useEffect(() => {
-    if (isConnected && activeProjectPath) {
-      fetchSessions();
-    }
-  }, [isConnected, activeProjectPath, fetchSessions]);
+  // Viewability config for prefetching
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50,
+    minimumViewTime: 300,
+  }).current;
+
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken<Session>[] }) => {
+      const visibleIds = viewableItems
+        .filter((item) => item.isViewable && item.item)
+        .map((item) => item.item.id);
+
+      // Prefetch visible sessions (limit to 3)
+      visibleIds.slice(0, 3).forEach((id) => {
+        prefetchSession(id);
+      });
+    },
+  ).current;
 
   const handleRefresh = useCallback(() => {
-    fetchSessions();
-  }, [fetchSessions]);
+    refetch();
+  }, [refetch]);
 
   const handleCreateSession = async () => {
-    const session = await createSession();
-    if (session) {
-      router.push(`/session/${session.id}`);
+    try {
+      const session = await createSessionMutation.mutateAsync();
+      if (session) {
+        router.push(`/session/${session.id}`);
+      }
+    } catch (error) {
+      console.error("Failed to create session:", error);
     }
   };
 
   const handleDeleteSession = async (id: string) => {
-    await deleteSession(id);
+    try {
+      await deleteSessionMutation.mutateAsync(id);
+    } catch (error) {
+      console.error("Failed to delete session:", error);
+    }
   };
 
   // No server selected
@@ -122,14 +158,15 @@ export default function SessionsScreen() {
           <SessionListItem
             session={item}
             status={sessionStatuses[item.id]}
-            tokenCounts={sessionTokenCounts[item.id]}
             onPress={() => router.push(`/session/${item.id}`)}
             onDelete={() => handleDeleteSession(item.id)}
           />
         )}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
         refreshControl={
           <RefreshControl
-            refreshing={isLoading}
+            refreshing={isLoading || isRefetching}
             onRefresh={handleRefresh}
             tintColor={isDark ? "#fff" : primary[500]}
           />

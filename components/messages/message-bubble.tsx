@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import type {
   Message,
@@ -20,15 +21,20 @@ function isUserMessage(message: Message): message is UserMessage {
   return message.role === "user";
 }
 
-export function MessageBubble({ message, parts }: MessageBubbleProps) {
+function MessageBubbleComponent({ message, parts }: MessageBubbleProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const isUser = isUserMessage(message);
 
-  // Filter and sort parts
-  const textParts = parts.filter((p) => p.type === "text");
-  const reasoningParts = parts.filter((p) => p.type === "reasoning");
-  const toolParts = parts.filter((p) => p.type === "tool");
+  // Memoize filtered parts to avoid recalculation on every render
+  const { textParts, reasoningParts, toolParts } = useMemo(
+    () => ({
+      textParts: parts.filter((p) => p.type === "text"),
+      reasoningParts: parts.filter((p) => p.type === "reasoning"),
+      toolParts: parts.filter((p) => p.type === "tool"),
+    }),
+    [parts],
+  );
 
   // For user messages, just show the first text part
   if (isUser) {
@@ -157,3 +163,37 @@ const styles = StyleSheet.create({
     color: dark[500],
   },
 });
+
+// Memoize the component to prevent unnecessary re-renders
+export const MessageBubble = memo(
+  MessageBubbleComponent,
+  (prevProps, nextProps) => {
+    // Custom comparison for better performance
+    // Only re-render if message id changes or parts array length/content changes
+    if (prevProps.message.id !== nextProps.message.id) return false;
+    if (prevProps.parts.length !== nextProps.parts.length) return false;
+
+    // Check if any part has changed (by id and relevant content)
+    for (let i = 0; i < prevProps.parts.length; i++) {
+      const prevPart = prevProps.parts[i];
+      const nextPart = nextProps.parts[i];
+      if (prevPart.id !== nextPart.id) return false;
+      // For text parts, check if text changed (streaming updates)
+      if (prevPart.type === "text" && nextPart.type === "text") {
+        if (prevPart.text !== nextPart.text) return false;
+      }
+      // For tool parts, check if state changed
+      if (prevPart.type === "tool" && nextPart.type === "tool") {
+        if (prevPart.state.status !== nextPart.state.status) return false;
+        // Check title only for states that have it (running, completed)
+        const prevTitle =
+          "title" in prevPart.state ? prevPart.state.title : undefined;
+        const nextTitle =
+          "title" in nextPart.state ? nextPart.state.title : undefined;
+        if (prevTitle !== nextTitle) return false;
+      }
+    }
+
+    return true;
+  },
+);

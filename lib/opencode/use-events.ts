@@ -3,6 +3,7 @@ import EventSource from "react-native-sse";
 import { useServersStore } from "@/lib/stores/servers";
 import { useSessionsStore } from "@/lib/stores/sessions";
 import { usePermissionsStore } from "@/lib/stores/permissions";
+import { useSessionQueryUpdaters } from "@/lib/query";
 import type {
   Session,
   Message,
@@ -30,12 +31,7 @@ export function useEvents() {
   const serverStates = useServersStore((s) => s.serverStates);
   const activeProjectPath = useServersStore((s) => s.activeProjectPath);
 
-  const updateSessionFromEvent = useSessionsStore(
-    (s) => s.updateSessionFromEvent,
-  );
-  const removeSessionFromEvent = useSessionsStore(
-    (s) => s.removeSessionFromEvent,
-  );
+  // Store updaters for real-time current session
   const updateMessageFromEvent = useSessionsStore(
     (s) => s.updateMessageFromEvent,
   );
@@ -44,10 +40,13 @@ export function useEvents() {
     (s) => s.updateStatusFromEvent,
   );
   const updateTodosFromEvent = useSessionsStore((s) => s.updateTodosFromEvent);
-  const fetchSessions = useSessionsStore((s) => s.fetchSessions);
 
+  // Permission store
   const addPermission = usePermissionsStore((s) => s.addPermission);
   const removePermission = usePermissionsStore((s) => s.removePermission);
+
+  // TanStack Query updaters for cache
+  const queryUpdaters = useSessionQueryUpdaters();
 
   const activeServer = activeServerId ? serverStates[activeServerId] : null;
   const isConnected = activeServer?.status === "connected";
@@ -61,19 +60,26 @@ export function useEvents() {
         case "session.created":
         case "session.updated":
           if (properties.info) {
-            updateSessionFromEvent(properties.info as Session);
+            // Update TanStack Query cache
+            queryUpdaters.updateSession(properties.info as Session);
           }
           break;
 
         case "session.deleted":
           if (properties.info) {
-            removeSessionFromEvent((properties.info as Session).id);
+            // Update TanStack Query cache
+            queryUpdaters.removeSession((properties.info as Session).id);
           }
           break;
 
         case "session.status":
           if (properties.sessionID && properties.status) {
+            // Update both the Zustand store (for current session) and query cache
             updateStatusFromEvent(
+              properties.sessionID as string,
+              properties.status as SessionStatus,
+            );
+            queryUpdaters.updateStatus(
               properties.sessionID as string,
               properties.status as SessionStatus,
             );
@@ -82,22 +88,33 @@ export function useEvents() {
 
         case "message.updated":
           if (properties.info) {
+            // Update Zustand store (for real-time display)
             updateMessageFromEvent(properties.info as Message);
+            // Update query cache
+            queryUpdaters.updateMessage(properties.info as Message);
           }
           break;
 
         case "message.part.updated":
           if (properties.part) {
+            // Update Zustand store (for real-time display)
             updatePartFromEvent(
               properties.part as Part,
               properties.delta as string | undefined,
             );
+            // Update query cache
+            queryUpdaters.updatePart(properties.part as Part);
           }
           break;
 
         case "todo.updated":
           if (properties.sessionID && properties.todos) {
+            // Update both stores
             updateTodosFromEvent(
+              properties.sessionID as string,
+              properties.todos as Todo[],
+            );
+            queryUpdaters.updateTodos(
               properties.sessionID as string,
               properties.todos as Todo[],
             );
@@ -106,9 +123,12 @@ export function useEvents() {
 
         case "session.idle":
           if (properties.sessionID) {
-            updateStatusFromEvent(properties.sessionID as string, {
-              type: "idle",
-            });
+            const idleStatus: SessionStatus = { type: "idle" };
+            updateStatusFromEvent(properties.sessionID as string, idleStatus);
+            queryUpdaters.updateStatus(
+              properties.sessionID as string,
+              idleStatus,
+            );
           }
           break;
 
@@ -130,8 +150,7 @@ export function useEvents() {
       }
     },
     [
-      updateSessionFromEvent,
-      removeSessionFromEvent,
+      queryUpdaters,
       updateMessageFromEvent,
       updatePartFromEvent,
       updateStatusFromEvent,
@@ -180,13 +199,13 @@ export function useEvents() {
 
       eventSource.addEventListener("open", () => {
         console.log("SSE connection opened");
-        // Refresh sessions when reconnected
-        fetchSessions();
+        // Invalidate queries to refresh data when reconnected
+        queryUpdaters.invalidateAll();
       });
     } catch (error) {
       console.error("Failed to create SSE connection:", error);
     }
-  }, [serverUrl, activeProjectPath, isConnected, handleEvent, fetchSessions]);
+  }, [serverUrl, activeProjectPath, isConnected, handleEvent, queryUpdaters]);
 
   const disconnect = useCallback(() => {
     if (eventSourceRef.current) {

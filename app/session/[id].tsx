@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import {
   View,
   Text,
-  FlatList,
   TextInput,
   Pressable,
   KeyboardAvoidingView,
@@ -12,13 +11,26 @@ import {
   ScrollView,
   Modal,
 } from "react-native";
+import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { useSessionsStore } from "@/lib/stores/sessions";
-import { useModelsStore, type ModelInfo } from "@/lib/stores/models";
+import { useModelsStore } from "@/lib/stores/models";
 import { useAgentsStore } from "@/lib/stores/agents";
+import {
+  useSession,
+  useSessionMessages,
+  useShareSession,
+  useUnshareSession,
+  useAbortSession,
+  useSendPrompt,
+  useModels,
+  useAgents,
+  type ModelInfo,
+} from "@/lib/query";
 import { MessageBubble } from "@/components/messages/message-bubble";
+import type { Message, Part } from "@/lib/opencode/types";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { toast } from "@/lib/stores/toast";
@@ -39,52 +51,84 @@ export default function SessionDetailScreen() {
   const navigation = useNavigation();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef = useRef<
+    FlashListRef<{
+      info: Message;
+      parts: Part[];
+    }>
+  >(null);
 
   const [inputText, setInputText] = useState("");
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [modelSearchQuery, setModelSearchQuery] = useState("");
   const [showTasksModal, setShowTasksModal] = useState(false);
 
-  const currentSession = useSessionsStore((s) => s.currentSession);
-  const sessionTokenCounts = useSessionsStore((s) => s.sessionTokenCounts);
-  const isLoadingMessages = useSessionsStore((s) => s.isLoadingMessages);
-  const fetchSession = useSessionsStore((s) => s.fetchSession);
-  const fetchSessionMessages = useSessionsStore((s) => s.fetchSessionMessages);
-  const sendPrompt = useSessionsStore((s) => s.sendPrompt);
-  const abortSession = useSessionsStore((s) => s.abortSession);
-  const shareSession = useSessionsStore((s) => s.shareSession);
-  const unshareSession = useSessionsStore((s) => s.unshareSession);
-  const clearCurrentSession = useSessionsStore((s) => s.clearCurrentSession);
+  // TanStack Query hooks
+  const { data: session } = useSession(id);
+  const { data: messagesData, isLoading: isLoadingMessages } =
+    useSessionMessages(id);
+  const { data: modelsData, isLoading: isLoadingModels } = useModels();
+  const { data: agents = [] } = useAgents();
 
-  const models = useModelsStore((s) => s.models);
+  const shareSessionMutation = useShareSession();
+  const unshareSessionMutation = useUnshareSession();
+  const abortSessionMutation = useAbortSession();
+  const sendPromptMutation = useSendPrompt();
+
+  // Local store for real-time updates (SSE)
+  const currentSessionId = useSessionsStore((s) => s.currentSessionId);
+  const currentMessages = useSessionsStore((s) => s.currentMessages);
+  const currentTodos = useSessionsStore((s) => s.currentTodos);
+  const currentStatus = useSessionsStore((s) => s.currentStatus);
+  const setCurrentSession = useSessionsStore((s) => s.setCurrentSession);
+  const clearCurrentSession = useSessionsStore((s) => s.clearCurrentSession);
+  const initializeMessages = useSessionsStore((s) => s.initializeMessages);
+  const initializeTodos = useSessionsStore((s) => s.initializeTodos);
+  const initializeStatus = useSessionsStore((s) => s.initializeStatus);
+
+  // Model/Agent preferences from stores
   const selectedModel = useModelsStore((s) => s.selectedModel);
   const setSelectedModel = useModelsStore((s) => s.setSelectedModel);
-  const fetchModels = useModelsStore((s) => s.fetchModels);
   const loadSelectedModel = useModelsStore((s) => s.loadSelectedModel);
-  const isLoadingModels = useModelsStore((s) => s.isLoading);
-  const connectedProviderIds = useModelsStore((s) => s.connectedProviderIds);
 
   const selectedAgent = useAgentsStore((s) => s.selectedAgent);
   const setSelectedAgent = useAgentsStore((s) => s.setSelectedAgent);
-  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const loadSelectedAgent = useAgentsStore((s) => s.loadSelectedAgent);
-  const getPrimaryAgents = useAgentsStore((s) => s.getPrimaryAgents);
 
-  const isBusy = currentSession?.status.type === "busy";
-  const isShared = !!currentSession?.session.share?.url;
-  const shareUrl = currentSession?.session.share?.url;
+  const models = modelsData?.models ?? [];
+  const connectedProviderIds = modelsData?.connectedProviderIds ?? [];
+  const primaryAgents = agents.filter((a) => a.mode === "primary");
+
+  // Use current messages from store (real-time) or fallback to query data
+  const messages =
+    currentSessionId === id && currentMessages.length > 0
+      ? currentMessages
+      : (messagesData?.messages ?? []);
+  const todos =
+    currentSessionId === id ? currentTodos : (messagesData?.todos ?? []);
+  const status =
+    currentSessionId === id
+      ? currentStatus
+      : (messagesData?.status ?? { type: "idle" as const });
+  const tokenCounts = messagesData?.tokenCounts ?? {
+    input: 0,
+    output: 0,
+    total: 0,
+  };
+
+  const isBusy = status.type === "busy";
+  const isShared = !!session?.share?.url;
+  const shareUrl = session?.share?.url;
 
   // Get the model used in this session from the last assistant message
   const sessionModel = (() => {
-    if (!currentSession?.messages.length) {
+    if (!messages.length) {
       return null;
     }
     // Find the last assistant message to get the model used
-    for (let i = currentSession.messages.length - 1; i >= 0; i--) {
-      const msg = currentSession.messages[i].info;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i].info;
       if (msg.role === "assistant") {
-        // AssistantMessage has modelID and providerID at top level
         const assistantMsg = msg as unknown as {
           providerID?: string;
           modelID?: string;
@@ -97,21 +141,14 @@ export default function SessionDetailScreen() {
     return null;
   })();
 
-  // The model that will be used for the next message:
-  // - If user has selected a model, use that
-  // - Otherwise use the session's model (from last assistant message)
-  // - Otherwise use the default
+  // The model that will be used for the next message
   const nextMessageModel = selectedModel ?? sessionModel;
-
-  // For display, show the session's current model (what was last used)
-  // This is more intuitive - shows what model the conversation is using
   const displayModel = sessionModel ?? selectedModel;
   const displayModelInfo = models.find((m) => m.id === displayModel);
 
   const displayModelName = (() => {
     if (displayModelInfo) return displayModelInfo.name;
     if (displayModel) {
-      // Model might not be in our list (different provider), show the ID
       const [, ...modelParts] = displayModel.split("/");
       return modelParts.join("/") || displayModel;
     }
@@ -130,25 +167,62 @@ export default function SessionDetailScreen() {
       })
     : models;
 
-  // Define callbacks first
+  // Initialize session in store and sync with query data
+  useEffect(() => {
+    if (id) {
+      setCurrentSession(id);
+    }
+    return () => {
+      clearCurrentSession();
+    };
+  }, [id, setCurrentSession, clearCurrentSession]);
+
+  // Sync query data to store for real-time updates
+  useEffect(() => {
+    if (messagesData && currentSessionId === id) {
+      // Only initialize if store is empty (first load)
+      if (currentMessages.length === 0) {
+        initializeMessages(messagesData.messages);
+        initializeTodos(messagesData.todos);
+        initializeStatus(messagesData.status);
+      }
+    }
+  }, [
+    messagesData,
+    id,
+    currentSessionId,
+    currentMessages.length,
+    initializeMessages,
+    initializeTodos,
+    initializeStatus,
+  ]);
+
+  // Load preferences on mount
+  useEffect(() => {
+    loadSelectedModel();
+    loadSelectedAgent();
+  }, [loadSelectedModel, loadSelectedAgent]);
+
   const handleToggleShare = useCallback(async () => {
     if (!id) return;
 
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    if (isShared) {
-      const result = await unshareSession(id);
-      if (result) {
+    try {
+      if (isShared) {
+        await unshareSessionMutation.mutateAsync(id);
         toast.info("Session unshared");
+      } else {
+        const result = await shareSessionMutation.mutateAsync(id);
+        if (result?.share?.url) {
+          await Clipboard.setStringAsync(result.share.url);
+          toast.success("Share link copied to clipboard");
+        }
       }
-    } else {
-      const result = await shareSession(id);
-      if (result?.share?.url) {
-        await Clipboard.setStringAsync(result.share.url);
-        toast.success("Share link copied to clipboard");
-      }
+    } catch (error) {
+      console.error("Failed to toggle share:", error);
     }
-  }, [id, isShared, shareSession, unshareSession]);
+  }, [id, isShared, shareSessionMutation, unshareSessionMutation]);
 
   const handleCopyShareLink = useCallback(async () => {
     if (!shareUrl) return;
@@ -157,27 +231,6 @@ export default function SessionDetailScreen() {
     await Clipboard.setStringAsync(shareUrl);
     toast.success("Share link copied");
   }, [shareUrl]);
-
-  // Fetch session data
-  useEffect(() => {
-    if (id) {
-      fetchSession(id);
-      fetchSessionMessages(id);
-    }
-
-    return () => {
-      clearCurrentSession();
-    };
-  }, [id, fetchSession, fetchSessionMessages, clearCurrentSession]);
-
-  // Load models, agents and selected values on mount
-  useEffect(() => {
-    loadSelectedModel();
-    fetchModels();
-    loadSelectedAgent();
-    fetchAgents();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleSelectModel = useCallback(
     (model: ModelInfo) => {
@@ -193,7 +246,6 @@ export default function SessionDetailScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowModelPicker((prev) => {
       if (prev) {
-        // Closing the picker, clear search
         setModelSearchQuery("");
       }
       return !prev;
@@ -202,18 +254,16 @@ export default function SessionDetailScreen() {
 
   const handleToggleAgent = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const agents = getPrimaryAgents();
-    if (agents.length < 2) return;
+    if (primaryAgents.length < 2) return;
 
-    // Toggle between plan and build
     const nextAgent = selectedAgent === "build" ? "plan" : "build";
     setSelectedAgent(nextAgent);
-  }, [selectedAgent, setSelectedAgent, getPrimaryAgents]);
+  }, [selectedAgent, setSelectedAgent, primaryAgents.length]);
 
   // Update navigation header with share button
   useEffect(() => {
     navigation.setOptions({
-      title: currentSession?.session.title || "Session",
+      title: session?.title || "Session",
       headerRight: () => (
         <View style={styles.headerRight}>
           {isShared && (
@@ -246,7 +296,7 @@ export default function SessionDetailScreen() {
       ),
     });
   }, [
-    currentSession?.session.title,
+    session?.title,
     isShared,
     isDark,
     navigation,
@@ -260,15 +310,28 @@ export default function SessionDetailScreen() {
     const text = inputText.trim();
     setInputText("");
     setShowModelPicker(false);
-    // Use the selected model and agent
-    await sendPrompt(id, text, nextMessageModel ?? undefined, selectedAgent);
+
+    try {
+      await sendPromptMutation.mutateAsync({
+        sessionId: id,
+        text,
+        modelId: nextMessageModel ?? undefined,
+        agent: selectedAgent,
+      });
+    } catch (error) {
+      console.error("Failed to send prompt:", error);
+    }
   };
 
   const handleAbort = async () => {
     if (id) {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await abortSession(id);
-      toast.info("Session aborted");
+      try {
+        await abortSessionMutation.mutateAsync(id);
+        toast.info("Session aborted");
+      } catch (error) {
+        console.error("Failed to abort session:", error);
+      }
     }
   };
 
@@ -277,32 +340,13 @@ export default function SessionDetailScreen() {
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
-    if (currentSession?.messages.length) {
-      // Reset scroll-away flag when new message arrives
-      userScrolledAwayRef.current = false;
+    if (messages.length && !userScrolledAwayRef.current) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [currentSession?.messages.length]);
+  }, [messages.length]);
 
-  // Handle content size changes (for streaming updates)
-  const handleContentSizeChange = useCallback(
-    (_width: number, height: number) => {
-      // Auto-scroll if user hasn't manually scrolled away
-      if (!userScrolledAwayRef.current) {
-        // Use scrollToOffset for more reliable scrolling during rapid updates
-        // Adding extra offset ensures we scroll past the content
-        flatListRef.current?.scrollToOffset({
-          offset: height + 100,
-          animated: false,
-        });
-      }
-    },
-    [],
-  );
-
-  // Track when user manually scrolls away from bottom
   const handleScroll = useCallback(
     (event: {
       nativeEvent: {
@@ -316,19 +360,28 @@ export default function SessionDetailScreen() {
       const distanceFromBottom =
         contentSize.height - layoutMeasurement.height - contentOffset.y;
 
-      // If user scrolled more than 200px away from bottom, they've scrolled away
-      // We use a larger threshold to avoid false positives during auto-scroll
       if (distanceFromBottom > 200) {
         userScrolledAwayRef.current = true;
       } else if (distanceFromBottom < 50) {
-        // User is at bottom, reset the flag
         userScrolledAwayRef.current = false;
       }
     },
     [],
   );
 
-  if (!currentSession) {
+  const renderMessageItem = useCallback(
+    ({ item }: { item: { info: Message; parts: Part[] } }) => (
+      <MessageBubble message={item.info} parts={item.parts} />
+    ),
+    [],
+  );
+
+  const keyExtractor = useCallback(
+    (item: { info: Message; parts: Part[] }) => item.info.id,
+    [],
+  );
+
+  if (!session && isLoadingMessages) {
     return (
       <View
         style={[
@@ -352,17 +405,18 @@ export default function SessionDetailScreen() {
       keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
     >
       {/* Messages list */}
-      <FlatList
+      <FlashList
         ref={flatListRef}
-        data={currentSession.messages}
-        keyExtractor={(item) => item.info.id}
-        renderItem={({ item }) => (
-          <MessageBubble message={item.info} parts={item.parts} />
-        )}
+        data={messages}
+        keyExtractor={keyExtractor}
+        renderItem={renderMessageItem}
         contentContainerStyle={{ paddingVertical: 16 }}
-        onContentSizeChange={handleContentSizeChange}
         onScroll={handleScroll}
         scrollEventThrottle={16}
+        drawDistance={500}
+        maintainVisibleContentPosition={{
+          autoscrollToBottomThreshold: 100,
+        }}
         ListEmptyComponent={
           !isLoadingMessages ? (
             <View style={styles.emptyContainer}>
@@ -393,12 +447,8 @@ export default function SessionDetailScreen() {
               <Text
                 style={[styles.modalTitle, isDark && styles.modalTitleDark]}
               >
-                Tasks (
-                {
-                  currentSession.todos.filter((t) => t.status === "completed")
-                    .length
-                }
-                /{currentSession.todos.length})
+                Tasks ({todos.filter((t) => t.status === "completed").length}/
+                {todos.length})
               </Text>
               <Pressable onPress={() => setShowTasksModal(false)} hitSlop={8}>
                 <IconSymbol
@@ -412,7 +462,7 @@ export default function SessionDetailScreen() {
               style={styles.modalScroll}
               showsVerticalScrollIndicator={false}
             >
-              {currentSession.todos.map((todo) => (
+              {todos.map((todo) => (
                 <View key={todo.id} style={styles.todoItem}>
                   <View
                     style={[
@@ -602,11 +652,10 @@ export default function SessionDetailScreen() {
       {/* Input bar */}
       <View style={[styles.inputWrapper, isDark && styles.inputWrapperDark]}>
         {/* Tasks and Token count row - above input */}
-        {(currentSession.todos.length > 0 ||
-          (id && sessionTokenCounts[id]?.total > 0)) && (
+        {(todos.length > 0 || tokenCounts.total > 0) && (
           <View style={styles.aboveInputRow}>
             {/* Tasks button - left side */}
-            {currentSession.todos.length > 0 ? (
+            {todos.length > 0 ? (
               <Pressable
                 onPress={() => setShowTasksModal(true)}
                 style={({ pressed }) => [
@@ -630,7 +679,7 @@ export default function SessionDetailScreen() {
                       isDark && styles.tasksButtonTextDark,
                     ]}
                   >
-                    {`Tasks (${currentSession.todos.filter((t) => t.status === "completed").length}/${currentSession.todos.length})`}
+                    {`Tasks (${todos.filter((t) => t.status === "completed").length}/${todos.length})`}
                   </Text>
                 </View>
               </Pressable>
@@ -639,7 +688,7 @@ export default function SessionDetailScreen() {
             )}
 
             {/* Token count - right side */}
-            {id && sessionTokenCounts[id]?.total > 0 && (
+            {tokenCounts.total > 0 && (
               <View
                 style={[
                   styles.tokenCountBadge,
@@ -657,105 +706,105 @@ export default function SessionDetailScreen() {
                     isDark && styles.tokenCountTextDark,
                   ]}
                 >
-                  {formatTokenCount(sessionTokenCounts[id].total)} tokens
+                  {formatTokenCount(tokenCounts.total)} tokens
                 </Text>
               </View>
             )}
           </View>
         )}
 
-        {/* Input row with send button */}
-        <View style={styles.inputRow}>
-          <View
-            style={[styles.inputContainer, isDark && styles.inputContainerDark]}
-          >
-            {/* Selector row for model and agent */}
-            <View style={styles.selectorRow}>
-              {/* Model selector */}
-              <Pressable
-                onPress={handleToggleModelPicker}
-                style={({ pressed }) => [
-                  styles.modelSelector,
-                  isDark && styles.modelSelectorDark,
-                  pressed && styles.modelSelectorPressed,
-                  pressed && isDark && styles.modelSelectorPressedDark,
-                ]}
-                hitSlop={4}
-              >
-                <View style={styles.modelSelectorRow}>
-                  <View style={styles.modelSelectorIcon}>
-                    <IconSymbol
-                      name="cpu"
-                      size={16}
-                      color={isDark ? dark[400] : dark[500]}
-                    />
-                  </View>
-                  <Text
-                    style={[
-                      styles.modelSelectorText,
-                      isDark && styles.modelSelectorTextDark,
-                    ]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {displayModelName}
-                  </Text>
-                  <View style={styles.modelSelectorIcon}>
-                    <IconSymbol
-                      name={showModelPicker ? "chevron.up" : "chevron.down"}
-                      size={14}
-                      color={isDark ? dark[400] : dark[500]}
-                    />
-                  </View>
-                </View>
-              </Pressable>
-
-              {/* Agent toggle */}
-              <Pressable
-                onPress={handleToggleAgent}
-                style={({ pressed }) => [
-                  styles.agentToggle,
-                  isDark && styles.agentToggleDark,
-                  selectedAgent === "plan" && styles.agentTogglePlan,
-                  selectedAgent === "plan" &&
-                    isDark &&
-                    styles.agentTogglePlanDark,
-                  pressed && styles.agentTogglePressed,
-                  pressed && isDark && styles.agentTogglePressedDark,
-                ]}
-                hitSlop={4}
-              >
-                <View style={styles.agentToggleRow}>
+        {/* Input container with everything inside */}
+        <View
+          style={[styles.inputContainer, isDark && styles.inputContainerDark]}
+        >
+          {/* Selector row for model and agent */}
+          <View style={styles.selectorRow}>
+            {/* Model selector */}
+            <Pressable
+              onPress={handleToggleModelPicker}
+              style={({ pressed }) => [
+                styles.modelSelector,
+                isDark && styles.modelSelectorDark,
+                pressed && styles.modelSelectorPressed,
+                pressed && isDark && styles.modelSelectorPressedDark,
+              ]}
+              hitSlop={4}
+            >
+              <View style={styles.modelSelectorRow}>
+                <View style={styles.modelSelectorIcon}>
                   <IconSymbol
-                    name={selectedAgent === "plan" ? "doc.text" : "hammer"}
-                    size={14}
-                    color={
-                      selectedAgent === "plan"
-                        ? isDark
-                          ? colors.amber[400]
-                          : colors.amber[600]
-                        : isDark
-                          ? primary[400]
-                          : primary[600]
-                    }
+                    name="cpu"
+                    size={16}
+                    color={isDark ? dark[400] : dark[500]}
                   />
-                  <Text
-                    style={[
-                      styles.agentToggleText,
-                      isDark && styles.agentToggleTextDark,
-                      selectedAgent === "plan" && styles.agentToggleTextPlan,
-                      selectedAgent === "plan" &&
-                        isDark &&
-                        styles.agentToggleTextPlanDark,
-                    ]}
-                  >
-                    {selectedAgent}
-                  </Text>
                 </View>
-              </Pressable>
-            </View>
+                <Text
+                  style={[
+                    styles.modelSelectorText,
+                    isDark && styles.modelSelectorTextDark,
+                  ]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {displayModelName}
+                </Text>
+                <View style={styles.modelSelectorIcon}>
+                  <IconSymbol
+                    name={showModelPicker ? "chevron.up" : "chevron.down"}
+                    size={14}
+                    color={isDark ? dark[400] : dark[500]}
+                  />
+                </View>
+              </View>
+            </Pressable>
 
-            {/* Text input */}
+            {/* Agent toggle */}
+            <Pressable
+              onPress={handleToggleAgent}
+              style={({ pressed }) => [
+                styles.agentToggle,
+                isDark && styles.agentToggleDark,
+                selectedAgent === "plan" && styles.agentTogglePlan,
+                selectedAgent === "plan" &&
+                  isDark &&
+                  styles.agentTogglePlanDark,
+                pressed && styles.agentTogglePressed,
+                pressed && isDark && styles.agentTogglePressedDark,
+              ]}
+              hitSlop={4}
+            >
+              <View style={styles.agentToggleRow}>
+                <IconSymbol
+                  name={selectedAgent === "plan" ? "doc.text" : "hammer"}
+                  size={14}
+                  color={
+                    selectedAgent === "plan"
+                      ? isDark
+                        ? colors.amber[400]
+                        : colors.amber[600]
+                      : isDark
+                        ? primary[400]
+                        : primary[600]
+                  }
+                />
+                <Text
+                  style={[
+                    styles.agentToggleText,
+                    isDark && styles.agentToggleTextDark,
+                    selectedAgent === "plan" && styles.agentToggleTextPlan,
+                    selectedAgent === "plan" &&
+                      isDark &&
+                      styles.agentToggleTextPlanDark,
+                  ]}
+                >
+                  {selectedAgent}
+                </Text>
+              </View>
+            </Pressable>
+          </View>
+
+          {/* Text input row with send button */}
+          <View style={styles.inputRow}>
             <TextInput
               value={inputText}
               onChangeText={setInputText}
@@ -765,43 +814,43 @@ export default function SessionDetailScreen() {
               style={[styles.input, isDark && styles.inputDark]}
               onFocus={() => setShowModelPicker(false)}
             />
-          </View>
 
-          {/* Send/Abort button */}
-          {isBusy ? (
-            <Pressable
-              onPress={handleAbort}
-              style={({ pressed }) => [
-                styles.sendButton,
-                styles.abortButton,
-                pressed && styles.abortButtonPressed,
-              ]}
-            >
-              <IconSymbol name="xmark" size={24} color="#fff" />
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={handleSend}
-              disabled={!inputText.trim()}
-              style={({ pressed }) => [
-                styles.sendButton,
-                inputText.trim()
-                  ? styles.sendButtonActive
-                  : styles.sendButtonDisabled,
-                inputText.trim() && isDark && styles.sendButtonActiveDark,
-                !inputText.trim() && isDark && styles.sendButtonDisabledDark,
-                inputText.trim() && pressed && styles.sendButtonPressed,
-              ]}
-            >
-              <IconSymbol
-                name="paperplane.fill"
-                size={22}
-                color={
-                  inputText.trim() ? "#fff" : isDark ? dark[500] : dark[400]
-                }
-              />
-            </Pressable>
-          )}
+            {/* Send/Abort button */}
+            {isBusy ? (
+              <Pressable
+                onPress={handleAbort}
+                style={({ pressed }) => [
+                  styles.sendButton,
+                  styles.abortButton,
+                  pressed && styles.abortButtonPressed,
+                ]}
+              >
+                <IconSymbol name="xmark" size={20} color="#fff" />
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={handleSend}
+                disabled={!inputText.trim()}
+                style={({ pressed }) => [
+                  styles.sendButton,
+                  inputText.trim()
+                    ? styles.sendButtonActive
+                    : styles.sendButtonDisabled,
+                  inputText.trim() && isDark && styles.sendButtonActiveDark,
+                  !inputText.trim() && isDark && styles.sendButtonDisabledDark,
+                  inputText.trim() && pressed && styles.sendButtonPressed,
+                ]}
+              >
+                <IconSymbol
+                  name="paperplane.fill"
+                  size={18}
+                  color={
+                    inputText.trim() ? "#fff" : isDark ? dark[500] : dark[400]
+                  }
+                />
+              </Pressable>
+            )}
+          </View>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -1093,15 +1142,8 @@ const styles = StyleSheet.create({
     borderTopColor: dark[800],
     backgroundColor: dark[900],
   },
-  // Input row - main container for input area and send button
-  inputRow: {
-    flexDirection: "row" as const,
-    alignItems: "flex-end" as const,
-    gap: 12,
-  },
-  // Input container - holds model selector and text input
+  // Input container - holds everything: selectors, input, and send button
   inputContainer: {
-    flex: 1,
     borderRadius: 24,
     backgroundColor: dark[100],
     paddingHorizontal: 16,
@@ -1113,6 +1155,8 @@ const styles = StyleSheet.create({
   },
   // Model selector - inline pill button
   modelSelector: {
+    flex: 1,
+    minWidth: 0,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 16,
@@ -1135,7 +1179,6 @@ const styles = StyleSheet.create({
   },
   modelSelectorText: {
     flexShrink: 1,
-    maxWidth: 150,
     fontSize: 13,
     fontWeight: "500",
     color: dark[600],
@@ -1155,6 +1198,7 @@ const styles = StyleSheet.create({
   },
   // Agent toggle - pill button to switch between plan/build
   agentToggle: {
+    flexShrink: 0,
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 16,
@@ -1195,8 +1239,15 @@ const styles = StyleSheet.create({
   agentToggleTextPlanDark: {
     color: colors.amber[400],
   },
+  // Input row - holds text input and send button
+  inputRow: {
+    flexDirection: "row" as const,
+    alignItems: "flex-end" as const,
+    gap: 8,
+  },
   // Text input
   input: {
+    flex: 1,
     minHeight: 36,
     maxHeight: 150,
     fontSize: 17,
@@ -1208,17 +1259,14 @@ const styles = StyleSheet.create({
   inputDark: {
     color: "#fff",
   },
-  // Send button - larger and more prominent
+  // Send button - smaller to fit inside input container
   sendButton: {
-    width: 48,
-    height: 48,
-    minWidth: 48,
-    minHeight: 48,
-    borderRadius: 24,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center" as const,
     justifyContent: "center" as const,
     flexShrink: 0,
-    marginBottom: 2,
   },
   sendButtonActive: {
     backgroundColor: primary[500],

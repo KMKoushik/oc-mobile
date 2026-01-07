@@ -5,7 +5,7 @@ import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useServersStore } from "@/lib/stores/servers";
-import { useSessionsStore } from "@/lib/stores/sessions";
+import { useCreateSession } from "@/lib/query";
 import { primary, dark } from "@/constants/theme";
 
 function SessionsHeaderLeft() {
@@ -73,15 +73,19 @@ function SessionsHeaderRight() {
   const activeServerId = useServersStore((s) => s.activeServerId);
   const activeProjectPath = useServersStore((s) => s.activeProjectPath);
   const serverStates = useServersStore((s) => s.serverStates);
-  const createSession = useSessionsStore((s) => s.createSession);
+  const createSessionMutation = useCreateSession();
 
   const activeServer = activeServerId ? serverStates[activeServerId] : null;
   const isConnected = activeServer?.status === "connected";
 
   const handleCreateSession = async () => {
-    const session = await createSession();
-    if (session) {
-      router.push(`/session/${session.id}`);
+    try {
+      const session = await createSessionMutation.mutateAsync();
+      if (session) {
+        router.push(`/session/${session.id}`);
+      }
+    } catch (error) {
+      console.error("Failed to create session:", error);
     }
   };
 

@@ -3,6 +3,7 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -12,6 +13,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { queryClient } from "@/lib/query/client";
 import { useServersStore } from "@/lib/stores/servers";
 import { usePermissionsStore } from "@/lib/stores/permissions";
 import { useEvents } from "@/lib/opencode/use-events";
@@ -79,42 +81,44 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <ThemeProvider
-          value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-        >
-          <StoreInitializer />
-          <EventSubscriber />
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen
-              name="server/add"
-              options={{
-                presentation: "modal",
-                title: "Add Server",
-              }}
-            />
-            <Stack.Screen
-              name="projects"
-              options={{
-                presentation: "modal",
-                title: "Switch Project",
-              }}
-            />
-            <Stack.Screen
-              name="session/[id]"
-              options={{
-                title: "Session",
-                headerBackTitle: "Back",
-              }}
-            />
-          </Stack>
-          <ToastContainer />
-          <PermissionHandler />
-          <StatusBar style="auto" />
-        </ThemeProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <QueryClientProvider client={queryClient}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <ThemeProvider
+            value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+          >
+            <StoreInitializer />
+            <EventSubscriber />
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="server/add"
+                options={{
+                  presentation: "modal",
+                  title: "Add Server",
+                }}
+              />
+              <Stack.Screen
+                name="projects"
+                options={{
+                  presentation: "modal",
+                  title: "Switch Project",
+                }}
+              />
+              <Stack.Screen
+                name="session/[id]"
+                options={{
+                  title: "Session",
+                  headerBackTitle: "Back",
+                }}
+              />
+            </Stack>
+            <ToastContainer />
+            <PermissionHandler />
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </QueryClientProvider>
   );
 }

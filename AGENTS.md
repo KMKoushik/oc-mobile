@@ -67,3 +67,6 @@ assets/        # Images, fonts
 const theme = useColorScheme() ?? 'light';  // Nullish coalescing
 props.onPressIn?.(ev);                       // Optional chaining
 ```
+
+## opencode reference
+If you have any doubpts on how something in opencocde works check the cloned referece folder in .reference/opencode

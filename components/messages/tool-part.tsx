@@ -1,42 +1,62 @@
-import { useState } from 'react';
-import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
-import type { ToolPart as ToolPartType } from '@/lib/opencode/types';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { primary, dark, colors, semantic } from '@/constants/theme';
+import { useState, memo } from "react";
+import {
+  View,
+  Text,
+  Pressable,
+  ActivityIndicator,
+  StyleSheet,
+} from "react-native";
+import type { ToolPart as ToolPartType } from "@/lib/opencode/types";
+import { IconSymbol } from "@/components/ui/icon-symbol";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { primary, dark, colors, semantic } from "@/constants/theme";
 
 interface ToolPartProps {
   part: ToolPartType;
 }
 
-function getToolIcon(toolName: string): React.ComponentProps<typeof IconSymbol>['name'] {
-  if (toolName.toLowerCase().includes('bash') || toolName.toLowerCase().includes('shell')) {
-    return 'terminal';
+function getToolIcon(
+  toolName: string,
+): React.ComponentProps<typeof IconSymbol>["name"] {
+  if (
+    toolName.toLowerCase().includes("bash") ||
+    toolName.toLowerCase().includes("shell")
+  ) {
+    return "terminal";
   }
-  if (toolName.toLowerCase().includes('read') || toolName.toLowerCase().includes('file')) {
-    return 'doc.fill';
+  if (
+    toolName.toLowerCase().includes("read") ||
+    toolName.toLowerCase().includes("file")
+  ) {
+    return "doc.fill";
   }
-  if (toolName.toLowerCase().includes('edit') || toolName.toLowerCase().includes('write')) {
-    return 'pencil';
+  if (
+    toolName.toLowerCase().includes("edit") ||
+    toolName.toLowerCase().includes("write")
+  ) {
+    return "pencil";
   }
-  if (toolName.toLowerCase().includes('glob') || toolName.toLowerCase().includes('grep')) {
-    return 'doc.on.doc';
+  if (
+    toolName.toLowerCase().includes("glob") ||
+    toolName.toLowerCase().includes("grep")
+  ) {
+    return "doc.on.doc";
   }
-  return 'wrench.fill';
+  return "wrench.fill";
 }
 
-export function ToolPart({ part }: ToolPartProps) {
+function ToolPartComponent({ part }: ToolPartProps) {
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = colorScheme === "dark";
   const [isExpanded, setIsExpanded] = useState(false);
 
   const { state, tool } = part;
   const icon = getToolIcon(tool);
 
-  const isPending = state.status === 'pending';
-  const isRunning = state.status === 'running';
-  const isCompleted = state.status === 'completed';
-  const isError = state.status === 'error';
+  const isPending = state.status === "pending";
+  const isRunning = state.status === "running";
+  const isCompleted = state.status === "completed";
+  const isError = state.status === "error";
 
   const title = isCompleted || isRunning ? state.title || tool : tool;
 
@@ -59,9 +79,17 @@ export function ToolPart({ part }: ToolPartProps) {
               color={isDark ? primary[400] : primary[500]}
             />
           ) : isCompleted ? (
-            <IconSymbol name="checkmark.circle.fill" size={18} color={semantic.success} />
+            <IconSymbol
+              name="checkmark.circle.fill"
+              size={18}
+              color={semantic.success}
+            />
           ) : isError ? (
-            <IconSymbol name="xmark.circle.fill" size={18} color={semantic.error} />
+            <IconSymbol
+              name="xmark.circle.fill"
+              size={18}
+              color={semantic.error}
+            />
           ) : null}
         </View>
 
@@ -93,18 +121,22 @@ export function ToolPart({ part }: ToolPartProps) {
             name="chevron.right"
             size={14}
             color={isDark ? dark[500] : dark[400]}
-            style={{ transform: [{ rotate: isExpanded ? '90deg' : '0deg' }] }}
+            style={{ transform: [{ rotate: isExpanded ? "90deg" : "0deg" }] }}
           />
         )}
       </Pressable>
 
       {/* Expanded content */}
       {isExpanded && (isCompleted || isError) && (
-        <View style={[styles.expandedContent, isDark && styles.expandedContentDark]}>
+        <View
+          style={[styles.expandedContent, isDark && styles.expandedContentDark]}
+        >
           {/* Input */}
           {state.input && Object.keys(state.input).length > 0 && (
             <View style={styles.section}>
-              <Text style={[styles.sectionLabel, isDark && styles.sectionLabelDark]}>
+              <Text
+                style={[styles.sectionLabel, isDark && styles.sectionLabelDark]}
+              >
                 Input
               </Text>
               <Text
@@ -119,7 +151,9 @@ export function ToolPart({ part }: ToolPartProps) {
           {/* Output or Error */}
           {isCompleted && state.output && (
             <View style={styles.section}>
-              <Text style={[styles.sectionLabel, isDark && styles.sectionLabelDark]}>
+              <Text
+                style={[styles.sectionLabel, isDark && styles.sectionLabelDark]}
+              >
                 Output
               </Text>
               <Text
@@ -127,16 +161,14 @@ export function ToolPart({ part }: ToolPartProps) {
                 numberOfLines={20}
               >
                 {state.output.slice(0, 1000)}
-                {state.output.length > 1000 && '...'}
+                {state.output.length > 1000 && "..."}
               </Text>
             </View>
           )}
 
           {isError && state.error && (
             <View style={styles.section}>
-              <Text style={styles.errorLabel}>
-                Error
-              </Text>
+              <Text style={styles.errorLabel}>Error</Text>
               <Text style={[styles.errorText, isDark && styles.errorTextDark]}>
                 {state.error}
               </Text>
@@ -153,8 +185,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -167,7 +199,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.red[50],
   },
   headerErrorDark: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
   },
   statusContainer: {
     marginRight: 8,
@@ -204,14 +236,14 @@ const styles = StyleSheet.create({
   sectionLabel: {
     marginBottom: 4,
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: "500",
     color: dark[500],
   },
   sectionLabelDark: {
     color: dark[400],
   },
   codeText: {
-    fontFamily: 'monospace',
+    fontFamily: "monospace",
     fontSize: 12,
     color: dark[600],
   },
@@ -221,15 +253,28 @@ const styles = StyleSheet.create({
   errorLabel: {
     marginBottom: 4,
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.red[500],
   },
   errorText: {
-    fontFamily: 'monospace',
+    fontFamily: "monospace",
     fontSize: 12,
     color: colors.red[500],
   },
   errorTextDark: {
     color: colors.red[400],
   },
+});
+
+// Memoize component - only re-render when tool state changes
+export const ToolPart = memo(ToolPartComponent, (prevProps, nextProps) => {
+  if (prevProps.part.id !== nextProps.part.id) return false;
+  if (prevProps.part.state.status !== nextProps.part.state.status) return false;
+  // Check title for states that have it
+  const prevTitle =
+    "title" in prevProps.part.state ? prevProps.part.state.title : undefined;
+  const nextTitle =
+    "title" in nextProps.part.state ? nextProps.part.state.title : undefined;
+  if (prevTitle !== nextTitle) return false;
+  return true;
 });

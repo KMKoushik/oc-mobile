@@ -1,23 +1,23 @@
-import { useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
-import type { ReasoningPart as ReasoningPartType } from '@/lib/opencode/types';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { colors } from '@/constants/theme';
+import { useState, memo } from "react";
+import { View, Text, Pressable, StyleSheet } from "react-native";
+import type { ReasoningPart as ReasoningPartType } from "@/lib/opencode/types";
+import { IconSymbol } from "@/components/ui/icon-symbol";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { colors } from "@/constants/theme";
 
 interface ReasoningPartProps {
   part: ReasoningPartType;
 }
 
-export function ReasoningPart({ part }: ReasoningPartProps) {
+function ReasoningPartComponent({ part }: ReasoningPartProps) {
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = colorScheme === "dark";
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (!part.text) return null;
 
   // Preview text (first line or first 100 chars)
-  const preview = part.text.split('\n')[0].slice(0, 100);
+  const preview = part.text.split("\n")[0].slice(0, 100);
   const hasMore = part.text.length > preview.length;
 
   return (
@@ -44,7 +44,7 @@ export function ReasoningPart({ part }: ReasoningPartProps) {
                 color={isDark ? colors.amber[400] : colors.amber[600]}
                 style={{
                   marginLeft: 4,
-                  transform: [{ rotate: isExpanded ? '90deg' : '0deg' }],
+                  transform: [{ rotate: isExpanded ? "90deg" : "0deg" }],
                 }}
               />
             )}
@@ -54,7 +54,7 @@ export function ReasoningPart({ part }: ReasoningPartProps) {
             numberOfLines={isExpanded ? undefined : 2}
           >
             {isExpanded ? part.text : preview}
-            {!isExpanded && hasMore && '...'}
+            {!isExpanded && hasMore && "..."}
           </Text>
         </View>
       </Pressable>
@@ -67,15 +67,15 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   pressable: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     borderRadius: 8,
     backgroundColor: colors.amber[50],
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   pressableDark: {
-    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+    backgroundColor: "rgba(251, 191, 36, 0.1)",
   },
   icon: {
     marginTop: 2,
@@ -85,12 +85,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   label: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.amber[700],
   },
   labelDark: {
@@ -105,3 +105,14 @@ const styles = StyleSheet.create({
     color: colors.amber[200],
   },
 });
+
+// Memoize component - only re-render when text changes
+export const ReasoningPart = memo(
+  ReasoningPartComponent,
+  (prevProps, nextProps) => {
+    return (
+      prevProps.part.id === nextProps.part.id &&
+      prevProps.part.text === nextProps.part.text
+    );
+  },
+);
